@@ -50,13 +50,16 @@
     "icons": "electron build/build-icons.js",
     "shots": "electron build/store-shots.js",
     "pack:full": "node build/pack.js --full",
-    "build:all": "node build/pack.js && node build/pack.js --full && node build/msix.js"
+    "build:all": "node build/pack.js && node build/pack.js --full && node build/msix.js",
+    "test:i18n": "node test/i18n-test.js && node test/i18n-dom-test.js"
   },
   "devDependencies": {
     "electron": "^33.4.11",
-    "electron-builder": "^26.18.0"
+    "electron-builder": "^26.18.0",
+    "jsdom": "^31.0.1"
   },
   "dependencies": {
     "@napi-rs/lzma": "^1.5.3"
-  }
+  },
+  "localizedBuild": true
 }
