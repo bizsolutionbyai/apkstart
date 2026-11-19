@@ -8,6 +8,32 @@ const fs = require('fs');
 const path = require('path');
 
 const store = require('./core/store');
+const uiTranslations = require('./i18n/translate');
+const uiText = value => uiTranslations.translate(value, store.getSettings().uiLanguage);
+// Translate only presentation fields. Button order and action IDs remain unchanged.
+function uiDialogOptions(options) {
+  const out = { ...options };
+  for (const key of ['title', 'message', 'detail', 'checkboxLabel', 'buttonLabel']) {
+    if (typeof out[key] === 'string') out[key] = uiText(out[key]);
+  }
+  if (out.buttons) out.buttons = out.buttons.map(uiText);
+  return out;
+}
+for (const method of ['showMessageBox', 'showOpenDialog', 'showSaveDialog']) {
+  const original = dialog[method].bind(dialog);
+  dialog[method] = (...args) => {
+    args[args.length - 1] = uiDialogOptions(args[args.length - 1]);
+    return original(...args);
+  };
+}
+function uiMenu(items) {
+  return items.map(item => ({ ...item,
+    // Preserve application names in the tray.
+    ...(item.label && !item.uiUserLabel ? { label: uiText(item.label) } : {}),
+    ...(Array.isArray(item.submenu) ? { submenu: uiMenu(item.submenu) } : {}),
+  }));
+}
+
 const { Runtime } = require('./core/engine');
 const { Installer } = require('./core/installer');
 const { Sharer } = require('./core/sharer');
@@ -995,11 +1021,11 @@ function buildTray() {
     const runningLabel = currentAppPkg
       ? ((store.getApp(currentAppPkg) || {}).label || currentAppPkg)
       : '';
-    const menu = Menu.buildFromTemplate([
+    const menu = Menu.buildFromTemplate(uiMenu([
       { label: '打开 ApkStart', click: () => showWindow() },
       { type: 'separator' },
       ...(apps.length
-        ? apps.map((a) => ({ label: a.label, click: () => runLaunch(a.package) }))
+        ? apps.map((a) => ({ label: a.label, uiUserLabel: true, click: () => runLaunch(a.package) }))
         : [{ label: '还没有安装应用', enabled: false }]),
       { type: 'separator' },
       {
@@ -1056,7 +1082,7 @@ function buildTray() {
           app.quit();
         },
       },
-    ]);
+    ]));
     tray.setContextMenu(menu);
   };
   tray.setToolTip('ApkStart — 安卓应用运行器');
@@ -1124,6 +1150,10 @@ async function runUpdate() {
   if (store.STORE_BUILD) {
     shell.openExternal('ms-windows-store://downloadsandupdates').catch(() => {});
     return { ok: false, error: '商店版更新由 Microsoft Store 负责，已打开商店的「下载和更新」', manual: true };
+  }
+  if (require('../package.json').localizedBuild) {
+    shell.openExternal('https://github.com/bizsolutionbyai/apkstart/releases').catch(() => {});
+    return { ok: false, manual: true, error: uiText('Bản dịch dùng cập nhật riêng / Localized build uses separate updates') };
   }
   updateBusy = true;
   const sendProgress = (p) => send('update:progress', p);
@@ -1631,6 +1661,15 @@ function registerIpc() {
     return { ...patch, engine: eng };
   };
 
+  ipcMain.handle('ui-language:get', () => uiTranslations.locale(store.getSettings().uiLanguage));
+  ipcMain.handle('ui-language:set', (_event, value) => {
+    if (!['vi', 'en', 'zh-CN'].includes(value)) throw new Error('Unsupported interface language');
+    store.saveSettings({ uiLanguage: value });
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('ui-language:changed', value);
+    }
+    return value;
+  });
   ipcMain.handle('settings:get', () => store.getSettings());
   ipcMain.handle('settings:set', (_e, rawPatch) => {
     const patch = sanitizeResourcePatch(rawPatch);
@@ -3110,7 +3149,7 @@ if (!gotLock) {
       // 放在查新版本之前，避免 resumable 与新一轮 check 抢进度条。
       let resuming = false;
       try {
-        const job = updater.findResumableJob();
+        const job = require('../package.json').localizedBuild ? null : updater.findResumableJob();
         if (job) {
           resuming = true;
           appLog(`resuming pending update ${job.version} from cached payload`);

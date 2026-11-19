@@ -1,0 +1,29 @@
+name: Vietnamese-English portable
+on:
+  push:
+    branches: [feat/vi-en-interface]
+  pull_request:
+    paths: ['src/i18n/**', 'src/ui/**', 'src/*preload.js', 'src/main.js', 'test/i18n*', '.github/workflows/localized-portable.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  portable:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:i18n
+      - run: npm run pack
+      - name: Package portable archive
+        shell: pwsh
+        run: Compress-Archive -Path dist/ApkStart-win64-portable/* -DestinationPath ApkStart-0.6.1-vi-en-win64-portable.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ApkStart-0.6.1-vi-en-win64-portable
+          path: ApkStart-0.6.1-vi-en-win64-portable.zip
+          retention-days: 30

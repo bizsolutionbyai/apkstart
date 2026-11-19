@@ -12,3 +12,14 @@ contextBridge.exposeInMainWorld('apkstartSplash', {
   onDone: (cb) => { ipcRenderer.on('splash:done', () => cb()); },
   close: () => ipcRenderer.send('splash:close'),
 });
+
+// UI language is separate from the guest Android locale.
+contextBridge.exposeInMainWorld('apkstartLanguage', {
+  get: () => ipcRenderer.invoke('ui-language:get'),
+  set: (value) => ipcRenderer.invoke('ui-language:set', value),
+  onChange: (callback) => {
+    const listener = (_event, value) => callback(value);
+    ipcRenderer.on('ui-language:changed', listener);
+    return () => ipcRenderer.removeListener('ui-language:changed', listener);
+  },
+});
